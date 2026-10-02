@@ -13,18 +13,22 @@ Prepare the root `data.yaml`:
 & "$env:USERPROFILE\.local\bin\uv.exe" run prepare_data.py
 ```
 
-The root YAML uses lists of image directories for train, val, and test, so YOLO
-loads multiple datasets from one file. Missing or empty splits in individual
-sources are skipped; train and val must exist across the datasets overall.
-Existing splits are preserved, including datasets that only have test images.
+Preparation pools original train, validation, and test images across the 10 included
+datasets, then shuffles them with seed 42 and creates a 90:10 train/validation
+split. No test split is generated. Datasets with only test images are included
+in the pool too. Use `--seed` to select another reproducible split.
 
-Preparation writes only the root `data.yaml`, referencing the original dataset
-image folders directly. It never changes images, labels, class IDs, or annotation
+Preparation writes root `data.yaml` and image-path lists under `datasets/splits`.
+YOLO loads the pooled datasets through those lists; no duplicate image copies or
+combined image folder are needed. It never changes images, labels, class IDs, or annotation
 formats. The shared class mapping is `0: pig`, `1: person`, as requested. All
 sources must already use that mapping and compatible annotations. Source
 metadata declaring class 0 as person produces a warning, without remapping.
 Run preparation again after adding datasets. `--allow-partial` permits missing
-datasets. Duplicate images across datasets have not been audited.
+datasets. Duplicate/near-duplicate images across datasets have not been audited;
+this random file split does not guarantee separation by camera, video, or scene.
+Changing the ratio does not balance the source dataset sizes or object classes.
+The new split applies to a new training run; a running trainer retains its loaded split.
 
 Train (outdoor augmentation is enabled by default):
 

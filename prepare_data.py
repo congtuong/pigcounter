@@ -1,7 +1,8 @@
-"""Write the root multi-dataset YAML without changing source images or labels."""
+"""Pool all source images and write only a reproducible 90:10 train/val split."""
 from __future__ import annotations
 
 import argparse
+import random
 from pathlib import Path
 import yaml
 
@@ -13,14 +14,22 @@ ALIASES = ('pig-hjhho', 'pig-detection', 'pig-pig-pig',
 EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.webp'}
 
 
-def prepare(source: Path, allow_partial: bool = False) -> Path:
+def split_images(images: list[Path], seed: int) -> tuple[list[Path], list[Path]]:
+    images = sorted(set(images))
+    if len(images) < 2:
+        raise ValueError('At least two training/validation images are required')
+    random.Random(seed).shuffle(images)
+    val_count = max(1, min(len(images) - 1, round(len(images) * 0.1)))
+    return images[val_count:], images[:val_count]
+
+
+def prepare(source: Path, allow_partial: bool = False, seed: int = 42) -> Path:
     source = source.resolve()
     available = [alias for alias in ALIASES if (source / alias / 'data.yaml').is_file()]
     missing = sorted(set(ALIASES) - set(available))
     if missing and not allow_partial:
         raise ValueError('Missing datasets: ' + ', '.join(missing))
-    splits = {'train': [], 'val': [], 'test': []}
-    counts = dict(train=0, val=0, test=0)
+    pool = []
     for alias in available:
         folder = source / alias
         metadata = yaml.safe_load((folder / 'data.yaml').read_text(encoding='utf-8'))
@@ -32,18 +41,22 @@ def prepare(source: Path, allow_partial: bool = False) -> Path:
             image_dir = next((folder / s / 'images' for s in candidates if (folder / s / 'images').is_dir()), None)
             if image_dir is None:
                 continue
-            count = sum(1 for p in image_dir.rglob('*') if p.is_file() and p.suffix.lower() in EXTENSIONS)
-            if count:
-                splits[split].append(image_dir.as_posix())
-                counts[split] += count
-    if not counts['train'] or not counts['val']:
-        raise ValueError('Training and validation images are required overall')
-    config = {'path': ROOT.as_posix(), 'train': splits['train'], 'val': splits['val'], 'names': {0: 'pig', 1: 'person'}}
-    if counts['test']:
-        config['test'] = splits['test']
+            images = sorted(p for p in image_dir.rglob('*') if p.is_file() and p.suffix.lower() in EXTENSIONS)
+            pool.extend(images)
+    train, val = split_images(pool, seed)
+    manifests = source / 'splits'
+    manifests.mkdir(parents=True, exist_ok=True)
+    splits = {'train': train, 'val': val}
+    config = {'path': ROOT.as_posix(), 'names': {0: 'pig', 1: 'person'}}
+    for split, images in splits.items():
+        if images:
+            manifest = manifests / f'{split}.txt'
+            manifest.write_text(''.join(p.as_posix() + '\n' for p in images), encoding='utf-8')
+            config[split] = manifest.as_posix()
     data = ROOT / 'data.yaml'
     data.write_text(yaml.safe_dump(config, sort_keys=False), encoding='utf-8')
-    print(f'Wrote {data}: {len(available)} datasets, {counts}. Source images and labels unchanged.')
+    counts = {split: len(images) for split, images in splits.items()}
+    print(f'Wrote {data}: {len(available)} datasets, {counts}, seed={seed}. Source images and labels unchanged.')
     return data
 
 
@@ -51,9 +64,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--datasets', type=Path, default=ROOT / 'datasets')
     parser.add_argument('--allow-partial', action='store_true')
+    parser.add_argument('--seed', type=int, default=42, help='Reproducible random split seed')
     args = parser.parse_args()
     try:
-        prepare(args.datasets, args.allow_partial)
+        prepare(args.datasets, args.allow_partial, args.seed)
     except (ValueError, OSError) as exc:
         parser.error(str(exc))
 
