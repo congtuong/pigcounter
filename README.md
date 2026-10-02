@@ -1,52 +1,103 @@
 # Pig detector training
 
-Wait until `download_datasets.py` has finished before preparing the training data.
-Run from this project directory in PowerShell:
+Download the datasets first with `uv run download_datasets.py` and your
+`ROBOFLOW_API_KEY` environment variable. The list includes 11 datasets, including
+`data-qtyxx/pig-4ri1b` and the corrected `cong-tuong/pig-mkd4a-wyabd` project.
+Training currently excludes `pig-sei9k` from all splits because of noisy labels.
+Its downloaded files are retained for later pseudo labeling. The root YAML
+uses the other 10 datasets.
+
+Prepare the root `data.yaml`:
 
 ```powershell
-& "$env:USERPROFILE\.local\bin\uv.exe" run train_yolo.py --device 0
+& "$env:USERPROFILE\.local\bin\uv.exe" run prepare_data.py
 ```
 
-This installs the training dependencies, prepares all 11 datasets, and fine-tunes
-`yolo26l.pt` for 100 epochs at 640 pixels. Batch size is automatically selected
-for the GPU. The project selects CUDA 12.8 PyTorch wheels for RTX 50-series support.
-The first run downloads packages and pretrained weights.
+The root YAML uses lists of image directories for train, val, and test, so YOLO
+loads multiple datasets from one file. Missing or empty splits in individual
+sources are skipped; train and val must exist across the datasets overall.
+Existing splits are preserved, including datasets that only have test images.
 
-Preparation keeps original splits, maps pig/pigs/Pig to class 0, removes person
-annotations, and retains images without pigs as negative examples. The known
-single-class `pig-hjhho`, `pig-pig-pig`, and `pig-a2jtl` exports named `0` are
-treated as pig. Other unrecognized
-class names stop preparation for inspection. Labels must be detection boxes.
-Original downloads are preserved. Images use hard links when possible, with a
-copy fallback. Do not edit the prepared images, since hard links share content.
-The script checks required files, but downloads must finish before running it.
-Different source datasets can contain duplicate images; the original splits are
-preserved and cross-dataset duplicate leakage has not been audited.
+Preparation writes only the root `data.yaml`, referencing the original dataset
+image folders directly. It never changes images, labels, class IDs, or annotation
+formats. The shared class mapping is `0: pig`, `1: person`, as requested. All
+sources must already use that mapping and compatible annotations. Source
+metadata declaring class 0 as person produces a warning, without remapping.
+Run preparation again after adding datasets. `--allow-partial` permits missing
+datasets. Duplicate images across datasets have not been audited.
 
-Prepare without training:
+Train (outdoor augmentation is enabled by default):
 
 ```powershell
-& "$env:USERPROFILE\.local\bin\uv.exe" run train_yolo.py --prepare-only
+& "$env:USERPROFILE\.local\bin\uv.exe" run train_yolo.py --data data.yaml --device 0 --name yolo26l-pigs-outdoor
 ```
 
-Reuse prepared data (also use this when starting another training run):
+Without `--data`, training uses the root data.yaml. Preparation is a separate step;
+after changing the dataset list, run `uv run prepare_data.py` again.
+Defaults: pretrained `yolo26l.pt`, 100 epochs, 640 pixels, automatic GPU batch
+size, CUDA 12.8 PyTorch wheels for RTX 50-series support. Dependencies and model
+weights download on the first run. `--epochs`, `--imgsz`, `--batch`, and `--workers`
+are adjustable. Use `--workers 0` if Windows data loading causes problems.
+
+## Outdoor augmentation
+
+The outdoor profile samples motion blur (3–21 pixel kernels), small rotations,
+shifts, zoom, shear, and perspective changes. Brightness, contrast, gamma and
+color changes cover exposure differences. A weather effect is sampled on 25% of
+training images: drizzle, mild fog, shadows or sun glare. Noise and compression
+simulate low-light noise and compressed video. Blur is sampled on 45% of images.
+YOLO adjusts boxes for geometric changes; pixel effects keep boxes unchanged.
+Validation and test images stay unaugmented. Mosaic is reduced to 30% and closes
+for the final 15 epochs. `--augmentation standard` uses YOLO defaults for comparison.
+Evaluate on real shaky and rainy camera footage to measure improvement.
+
+Outputs are under `runs/detect/<name>` (or a numbered directory). Best weights:
+`weights/best.pt`; resumable checkpoint: `weights/last.pt`.
 
 ```powershell
-& "$env:USERPROFILE\.local\bin\uv.exe" run train_yolo.py --data datasets/combined-pigs/data.yaml --device 0 --epochs 150 --batch 8
+& "$env:USERPROFILE\.local\bin\uv.exe" run train_yolo.py --resume runs/detect/yolo26l-pigs-outdoor/weights/last.pt
 ```
 
-Preparation refuses to overwrite an existing output directory. After a failed
-preparation, choose another `--prepared` directory. `--allow-partial` explicitly
-allows preparing only datasets whose data.yaml is present; use only when their
-downloads have finished.
+Resume retains saved settings. To introduce new augmentation into an older model,
+start a new run with `--model <path-to-best.pt>` and `--data data.yaml`.
 
-Outputs are under `runs/detect/yolo26l-pigs` (or a numbered directory if already
-used). The best model is `weights/best.pt`; the resumable checkpoint is
-`weights/last.pt`:
+## Export the YOLO26x teacher and pseudo-label pig-sei9k
+
+After training finishes, use the actual best.pt path from your YOLO26x run:
 
 ```powershell
-& "$env:USERPROFILE\.local\bin\uv.exe" run train_yolo.py --resume runs/detect/yolo26l-pigs/weights/last.pt
+uv run export_tensorrt.py --model runs/detect/yolo26x-pigs/weights/best.pt --device 0
+uv run pseudo_label.py --model runs/detect/yolo26x-pigs/weights/best.engine --device 0
 ```
 
-Resume uses the checkpoint's saved training settings. Use `--workers 0` if Windows
-data loading causes problems. If a fixed batch runs out of GPU memory, reduce it.
+Export writes best.engine beside best.pt, with FP16, dynamic inputs, maximum
+batch 4, image size 640, and 4 GiB workspace by default. Ultralytics needs its
+ONNX and TensorRT export dependencies installed (it may attempt installation).
+Build the engine on the target GPU/software environment; rebuild when those
+change. Export after training to avoid competing for GPU memory. `--precision 32`
+selects FP32. Match the inference image size and keep inference batch at or below
+the export maximum. Dynamic batching handles the final smaller image batch.
+
+Pseudo labeling also accepts best.pt directly if TensorRT is unavailable:
+
+```powershell
+uv run pseudo_label.py --model runs/detect/yolo26x-pigs/weights/best.pt --conf 0.7
+```
+
+The output defaults to datasets/pig-sei9k-pseudo, with its own data.yaml,
+predictions.csv and summary.json. Original annotations are never read or changed.
+Images are hard-linked where possible; do not edit their contents. Teacher class
+names are mapped to pig=0/person=1. Confidence is excluded from training label
+rows and recorded in the CSV. Predictions replace annotations in the new dataset.
+Source splits are preserved, and no-confidence images are skipped by default;
+use --keep-empty only after reviewing them as negatives. Existing output folders
+are refused; choose a fresh --output for another pass. Failed runs can leave an
+incomplete output, so choose a fresh output when retrying. Review missed objects
+and false positives before adding pseudo labels to training. A high confidence
+threshold can omit real objects; treat these labels as candidates for review.
+
+The scripts do not add pseudo labels to the current root data.yaml. Keep the
+original noisy dataset excluded until review is complete. Pseudo-labeled val/test
+splits are not independent ground truth; use human-reviewed data for evaluation.
+The teacher currently has little or no person supervision after excluding
+pig-sei9k; review person predictions carefully before trusting them.

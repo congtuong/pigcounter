@@ -1,0 +1,28 @@
+path: C:/Users/carzy/code/pigcounter
+train:
+- C:/Users/carzy/code/pigcounter/datasets/pig-detection/train/images
+- C:/Users/carzy/code/pigcounter/datasets/pig-pig-pig/train/images
+- C:/Users/carzy/code/pigcounter/datasets/pig-whv6e/train/images
+- C:/Users/carzy/code/pigcounter/datasets/pig-vvvue/train/images
+- C:/Users/carzy/code/pigcounter/datasets/pig-mkd4a/train/images
+- C:/Users/carzy/code/pigcounter/datasets/pig-a2jtl/train/images
+- C:/Users/carzy/code/pigcounter/datasets/pig-detectv2/train/images
+- C:/Users/carzy/code/pigcounter/datasets/pig-4ri1b/train/images
+val:
+- C:/Users/carzy/code/pigcounter/datasets/pig-detection/valid/images
+- C:/Users/carzy/code/pigcounter/datasets/pig-pig-pig/valid/images
+- C:/Users/carzy/code/pigcounter/datasets/pig-whv6e/valid/images
+- C:/Users/carzy/code/pigcounter/datasets/pig-a2jtl/valid/images
+- C:/Users/carzy/code/pigcounter/datasets/pig-detectv2/valid/images
+- C:/Users/carzy/code/pigcounter/datasets/pig-4ri1b/valid/images
+names:
+  0: pig
+  1: person
+test:
+- C:/Users/carzy/code/pigcounter/datasets/pig-hjhho/test/images
+- C:/Users/carzy/code/pigcounter/datasets/pig-detection/test/images
+- C:/Users/carzy/code/pigcounter/datasets/pig-pig-pig/test/images
+- C:/Users/carzy/code/pigcounter/datasets/pig-tilpu/test/images
+- C:/Users/carzy/code/pigcounter/datasets/pig-whv6e/test/images
+- C:/Users/carzy/code/pigcounter/datasets/pig-a2jtl/test/images
+- C:/Users/carzy/code/pigcounter/datasets/pig-4ri1b/test/images

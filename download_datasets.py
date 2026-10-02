@@ -29,10 +29,10 @@ DATASETS: list[tuple[str, str, int | None, str]] = [
     ("li-yao-tseng",        "pig-tilpu",   None, "pig-tilpu"),
     ("track-pig",           "pig-whv6e",   None, "pig-whv6e"),
     ("pig-xcoka",           "pig-vvvue",   None, "pig-vvvue"),
-    ("s-workspace-ap4a5",   "pig-mkd4a",   None, "pig-mkd4a"),
-    ("ppig",                "pig-kebke",   None, "pig-kebke"),
+    ("cong-tuong",   "pig-mkd4a-wyabd",   None, "pig-mkd4a"),
     ("experimentdata",      "pig-a2jtl",   None, "pig-a2jtl"),
     ("zhuyishuailivecom",   "pig-detectv2-lvr9i", None, "pig-detectv2"),
+    ("data-qtyxx",           "pig-4ri1b", None, "pig-4ri1b"),
 ]
 
 OUTPUT_ROOT = Path("datasets")

@@ -12,4 +12,5 @@ wheels/
 # Downloaded datasets (large binaries)
 datasets/
 runs/
+weights/
 *.pt
